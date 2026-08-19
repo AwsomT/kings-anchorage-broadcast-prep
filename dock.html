@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>King's Anchorage Broadcast Prep</title>
+<style>
+  :root {
+    --bg: #1e1f22; --panel: #2b2d31; --panel2: #232529; --border: #3a3d44;
+    --text: #e8eaed; --muted: #9aa0a6; --accent: #4f8cff; --accent2: #3a6fd8;
+    --ok: #3fb950; --err: #f85149; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.45 -apple-system, system-ui, "Segoe UI", sans-serif;
+    padding: 12px;
+  }
+  h1 { font-size: 14px; margin: 0 0 2px; }
+  .sub { color: var(--muted); font-size: 11px; margin-bottom: 12px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  button {
+    background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+    padding: 9px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+    width: 100%;
+  }
+  button:hover { background: var(--accent2); }
+  button.secondary { background: var(--panel); border: 1px solid var(--border); color: var(--text); font-weight: 500; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+  .svc { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: var(--panel2); margin-top: 6px; font-size: 12px; }
+  .svc .name { flex: 1; }
+  .svc .when { color: var(--muted); font-size: 11px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex: 0 0 auto; }
+  .dot.ok { background: var(--ok); } .dot.err { background: var(--err); } .dot.run { background: var(--warn); }
+  .status { font-size: 11px; color: var(--muted); margin-top: 10px; white-space: pre-wrap; word-break: break-word; }
+  .status a { color: var(--accent); }
+  .pill { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); }
+  code { background: var(--panel2); padding: 1px 4px; border-radius: 4px; font-size: 11px; }
+  .warnbox { background: #3a2f1a; border: 1px solid var(--warn); color: #f0d78c; border-radius: 6px; padding: 8px; font-size: 11px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+  <h1>⚓ King's Anchorage <span class="pill" id="mode">TEST</span></h1>
+  <div class="sub">Broadcast Prep — creates the week's YouTube services, named + thumbnailed.</div>
+
+  <div class="warnbox" id="cfgwarn" style="display:none">
+    ⚠️ CLIENT_ID not set. Edit <code>dock.html</code> and paste your OAuth Client ID.
+  </div>
+
+  <div class="card">
+    <button id="signin">Sign in with Google</button>
+    <div class="status" id="authstatus">Not signed in.</div>
+  </div>
+
+  <div class="card">
+    <div class="row"><strong>This week's services</strong></div>
+    <div id="svclist"></div>
+  </div>
+
+  <button id="create" disabled>Set up this week (PRIVATE test)</button>
+  <div class="row" style="margin-top:8px">
+    <button class="secondary" id="cleanup" disabled>Find & delete ALL test broadcasts</button>
+  </div>
+  <div class="status" id="log"></div>
+
+<script>
+/* ============================================================
+   CONFIG — edit these two, then the services if needed.
+   ============================================================ */
+const CLIENT_ID = "1090702033261-4gucn2sh38k6orf0n862jg4s88it2ago.apps.googleusercontent.com";
+// Works at any host/path — localhost or a GitHub Pages sub-path. Register THIS exact
+// value (printed in the browser console on load) as an Authorized redirect URI.
+const REDIRECT_URI = window.location.origin + window.location.pathname;
+
+// dayOfWeek: 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
+const SERVICES = [
+  { key: "s9",  label: "9AM Sunday Service",        day: 0, hour: 9,  min: 0, thumb: "sunday.jpg" },
+  { key: "s11", label: "11AM Sunday Service",       day: 0, hour: 11, min: 0, thumb: "sunday.jpg" },
+  { key: "s18", label: "6PM Sunday Service",        day: 0, hour: 18, min: 0, thumb: "evening.jpg" },
+  { key: "mid", label: "Midweek Service",           day: 3, hour: 19, min: 0, thumb: "midweek.jpg" },
+  { key: "tt",  label: "Transformation Thursday",   day: 4, hour: 19, min: 0, thumb: "transformation-thursday.jpg" },
+];
+const THUMB_DIR = "thumbnails/";
+const DATE_STAMP = false; // set true to burn the date onto each thumbnail's corner
+const TITLE = (label, dateStr) => `${label} · ${dateStr}`;
+const PRIVACY = "private"; // test-safe: no subscriber notifications. Switch to "public" for real.
+const SCOPES = "https://www.googleapis.com/auth/youtube.force-ssl";
+/* ============================================================ */
+
+let accessToken = null;
+const madeIds = [];
+
+const $ = (id) => document.getElementById(id);
+const fmtDate = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+// Next occurrence of a given weekday/time, starting from today (inclusive).
+function nextOccurrence(day, hour, min) {
+  const now = new Date();
+  const d = new Date(now);
+  d.setHours(hour, min, 0, 0);
+  let delta = (day - d.getDay() + 7) % 7;
+  if (delta === 0 && d < now) delta = 7;
+  d.setDate(d.getDate() + delta);
+  return d;
+}
+
+function renderServices() {
+  const el = $("svclist");
+  el.innerHTML = "";
+  SERVICES.forEach((s) => {
+    s._date = nextOccurrence(s.day, s.hour, s.min);
+    const row = document.createElement("div");
+    row.className = "svc";
+    row.innerHTML = `<span class="dot" id="dot-${s.key}"></span>
+      <span class="name">${s.label}</span>
+      <span class="when">${s._date.toLocaleDateString(undefined,{weekday:"short"})} ${fmtDate(s._date)}</span>`;
+    el.appendChild(row);
+  });
+}
+
+function log(msg, cls) {
+  const el = $("log");
+  el.innerHTML += (cls ? `<span style="color:var(--${cls})">${msg}</span>` : msg) + "\n";
+}
+function setDot(key, cls) { const d = $("dot-"+key); if (d) d.className = "dot " + (cls||""); }
+function resetDots() { SERVICES.forEach((s) => setDot(s.key, "")); }
+
+/* ---------- OAuth (implicit flow — no secret, works in-browser) ---------- */
+function signIn() {
+  const p = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: "token",
+    scope: SCOPES,
+    include_granted_scopes: "true",
+    prompt: "consent",
+    state: "obsdock",
+  });
+  window.location.href = "https://accounts.google.com/o/oauth2/v2/auth?" + p;
+}
+function captureTokenFromHash() {
+  if (!window.location.hash) return;
+  const h = new URLSearchParams(window.location.hash.slice(1));
+  if (h.get("access_token")) {
+    accessToken = h.get("access_token");
+    sessionStorage.setItem("yt_token", accessToken);
+    history.replaceState(null, "", REDIRECT_URI);
+  }
+}
+function restoreToken() {
+  accessToken = accessToken || sessionStorage.getItem("yt_token");
+  if (accessToken) {
+    $("authstatus").textContent = "Signed in ✓  (session token — re-sign if calls fail)";
+    $("authstatus").style.color = "var(--ok)";
+    $("create").disabled = false;
+    $("cleanup").disabled = false;
+  }
+}
+
+/* ---------- YouTube API ---------- */
+async function yt(path, opts) {
+  const res = await fetch("https://www.googleapis.com/youtube/v3/" + path, {
+    ...opts,
+    headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json", ...(opts?.headers||{}) },
+  });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (res.status === 204) return null;            // DELETE returns empty body
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function createBroadcast(title, startISO) {
+  const body = {
+    snippet: { title, scheduledStartTime: startISO },
+    status: { privacyStatus: PRIVACY, selfDeclaredMadeForKids: false },
+    contentDetails: { enableAutoStart: false, enableAutoStop: false },
+  };
+  return yt("liveBroadcasts?part=snippet,status,contentDetails", { method: "POST", body: JSON.stringify(body) });
+}
+
+function loadImg(src) {
+  return new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error("image not found: " + src));
+    i.src = src;
+  });
+}
+
+// Build the thumbnail: real image from thumbnails/ if present, else a labeled placeholder.
+async function makeThumbnail(service, dateStr) {
+  const c = document.createElement("canvas");
+  c.width = 1280; c.height = 720;
+  const g = c.getContext("2d");
+  if (service.thumb) {
+    const img = await loadImg(THUMB_DIR + service.thumb);
+    g.drawImage(img, 0, 0, 1280, 720);
+  } else {
+    const grad = g.createLinearGradient(0, 0, 1280, 720);
+    grad.addColorStop(0, "#1a2a4f"); grad.addColorStop(1, "#0d1526");
+    g.fillStyle = grad; g.fillRect(0, 0, 1280, 720);
+    g.fillStyle = "#fff"; g.textAlign = "center";
+    g.font = "bold 84px system-ui, sans-serif"; g.fillText(service.label, 640, 380);
+  }
+  if (DATE_STAMP) {
+    g.textAlign = "right"; g.font = "600 46px system-ui, sans-serif";
+    g.lineWidth = 8; g.strokeStyle = "rgba(0,0,0,.55)"; g.strokeText(dateStr, 1236, 682);
+    g.fillStyle = "#fff"; g.fillText(dateStr, 1236, 682);
+  }
+  return new Promise((r) => c.toBlob(r, "image/jpeg", 0.92));
+}
+
+async function setThumbnail(videoId, blob) {
+  const res = await fetch(
+    "https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=" + videoId + "&uploadType=media",
+    { method: "POST", headers: { Authorization: "Bearer " + accessToken, "Content-Type": "image/jpeg" }, body: blob }
+  );
+  if (!res.ok) throw new Error(`thumbnail ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+async function run() {
+  $("create").disabled = true; $("log").innerHTML = ""; madeIds.length = 0;
+  resetDots();
+  for (const s of SERVICES) {
+    setDot(s.key, "run");
+    const dateStr = fmtDate(s._date);
+    try {
+      const b = await createBroadcast(TITLE(s.label, dateStr), s._date.toISOString());
+      madeIds.push(b.id);
+      log(`✓ ${s.label} created (id ${b.id})`, "ok");
+      try {
+        const thumb = await makeThumbnail(s, dateStr);
+        await setThumbnail(b.id, thumb);
+        log(`  ↳ thumbnail set`, "ok");
+      } catch (te) {
+        log(`  ↳ thumbnail FAILED: ${te.message}`, "err");
+      }
+      setDot(s.key, "ok");
+    } catch (e) {
+      log(`✗ ${s.label}: ${e.message}`, "err");
+      setDot(s.key, "err");
+    }
+  }
+  log(`\nDone. Open OBS → Manage Broadcast to see them.`);
+  $("create").disabled = false;
+  $("cleanup").disabled = madeIds.length === 0;
+}
+
+// Scan the channel for any broadcast whose title matches our services, and delete them.
+async function cleanup() {
+  $("cleanup").disabled = true;
+  $("log").innerHTML = "";
+  resetDots();
+  const labels = SERVICES.map((s) => s.label);
+  let found = [], pageToken = "";
+  try {
+    do {
+      const r = await yt("liveBroadcasts?part=snippet&broadcastStatus=all&maxResults=50" + (pageToken ? "&pageToken=" + pageToken : ""), { method: "GET" });
+      (r.items || []).forEach((it) => {
+        if (labels.some((l) => it.snippet.title.startsWith(l))) found.push(it);
+      });
+      pageToken = r.nextPageToken || "";
+    } while (pageToken);
+  } catch (e) { log("scan failed: " + e.message, "err"); $("cleanup").disabled = false; return; }
+
+  if (!found.length) { log("No test broadcasts found — channel is clean. ✓", "ok"); $("cleanup").disabled = false; return; }
+  log(`Found ${found.length} test broadcast(s). Deleting…`);
+  for (const it of found) {
+    try { await yt("liveBroadcasts?id=" + it.id, { method: "DELETE" }); log(`🗑 deleted "${it.snippet.title}"`, "warn"); }
+    catch (e) { log(`could not delete ${it.id}: ${e.message}`, "err"); }
+  }
+  log("\nCleanup complete.", "ok");
+  madeIds.length = 0;
+  $("cleanup").disabled = false;
+}
+
+/* ---------- init ---------- */
+console.log("[OAuth setup] Authorized JavaScript origin:", window.location.origin);
+console.log("[OAuth setup] Authorized redirect URI:", REDIRECT_URI);
+$("cfgwarn").style.display = CLIENT_ID.startsWith("PASTE_") ? "block" : "none";
+$("signin").onclick = signIn;
+$("create").onclick = run;
+$("cleanup").onclick = cleanup;
+renderServices();
+captureTokenFromHash();
+restoreToken();
+</script>
+</body>
+</html>
