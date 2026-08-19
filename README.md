@@ -23,12 +23,13 @@ one in OBS → **Manage Broadcast** and hits **Start Streaming**.
 ## How it's deployed
 
 The whole tool is a single self-contained web page (`index.html`) plus a `thumbnails/`
-folder. It's hosted for free on **GitHub Pages**, which gives it a permanent `https://` URL.
-Nothing runs on the church's computer — OBS just loads that URL. Reboots, updates, and
-volunteers changing machines don't break anything.
+folder. It's hosted for free on **GitHub Pages under Elijah's GitHub account (`AwsomT`)**,
+which gives it a permanent `https://awsomt.github.io/...` URL. Nothing runs on the church's
+computer — OBS just loads that URL. Reboots, updates, and volunteers changing machines don't
+break anything.
 
-- **Maintainer (Elijah):** owns the GitHub repo + Pages hosting. Pushes fixes and thumbnail
-  updates. See **Part A** and **Maintenance**.
+- **Maintainer (Elijah, GitHub `AwsomT`):** owns the GitHub repo + Pages hosting. Pushes fixes
+  and thumbnail updates. See **Part A** and **Maintenance**.
 - **Church Google account:** owns the YouTube channel and the Google Cloud OAuth client that
   lets the tool act on the channel. See **Part B**.
 - **OBS operator:** adds the dock URL once, then uses one button weekly. See **Part C** and
@@ -43,7 +44,7 @@ volunteers changing machines don't break anything.
 3. On GitHub: **Settings → Pages → Build and deployment → Source: Deploy from a branch →
    Branch: `main` / `/ (root)` → Save.**
 4. Wait ~1 minute. GitHub shows the live URL, e.g.
-   `https://<your-username>.github.io/kings-anchorage-broadcast-prep/`
+   `https://awsomt.github.io/kings-anchorage-broadcast-prep/`
    **This URL is used in Part B and Part C — keep it handy.**
 
 > The page needs the OAuth **Client ID** from Part B pasted into `index.html` before it works.
@@ -69,11 +70,11 @@ the Google account that manages the King's Anchorage YouTube channel.**
    - Name: `OBS Dock`
    - **Authorized JavaScript origins** → Add (⚠️ **no** trailing slash, no path):
      ```
-     https://<your-username>.github.io
+     https://awsomt.github.io
      ```
    - **Authorized redirect URIs** → Add (⚠️ **with** the full path **and** trailing slash):
      ```
-     https://<your-username>.github.io/kings-anchorage-broadcast-prep/
+     https://awsomt.github.io/kings-anchorage-broadcast-prep/
      ```
    - **Create** → copy the **Client ID** (ends in `.apps.googleusercontent.com`).
 
