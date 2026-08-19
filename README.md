@@ -29,7 +29,7 @@ computer — OBS just loads that URL. Reboots, updates, and volunteers changing 
 break anything.
 
 - **Maintainer (Elijah, GitHub `AwsomT`):** owns the GitHub repo + Pages hosting. Pushes fixes
-  and thumbnail updates. See **Part A** and **Maintenance**.
+  and thumbnail updates. See **Part A** and **`MAINTENANCE.md`**.
 - **Church Google account:** owns the YouTube channel and the Google Cloud OAuth client that
   lets the tool act on the channel. See **Part B**.
 - **OBS operator:** adds the dock URL once, then uses one button weekly. See **Part C** and
@@ -115,24 +115,8 @@ That's it. No renaming, no thumbnail uploads.
 
 ---
 
-## Maintenance (maintainer)
-
-**Change a thumbnail:** replace the image in `thumbnails/` (keep the same filename), commit,
-push. Best size **1280×720** (16:9), under 2 MB. Files may be `.jpg` or `.png` — the tool
-re-encodes to JPEG regardless, so the `.jpg` filename in config is fine either way.
-
-**Change a service time, name, or add/remove a service:** edit the `SERVICES` array near the
-top of `index.html`'s `<script>`:
-```js
-{ key: "s9", label: "9AM Sunday Service", day: 0, hour: 9, min: 0, thumb: "sunday.jpg" },
-// day: 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat   hour: 24-hour clock
-```
-
-**Burn the date onto thumbnails:** set `const DATE_STAMP = true;` (prints the date in the
-bottom-right corner). Off by default since the church uses finished art.
-
-**Clean up test/junk broadcasts:** the **Find & delete ALL test broadcasts** button scans the
-channel for anything matching the service names and deletes them.
+> **Maintaining this later?** See **`MAINTENANCE.md`** — a refresher for when you haven't
+> touched this in months (where everything lives, how to update, and the OAuth quirks).
 
 ---
 
