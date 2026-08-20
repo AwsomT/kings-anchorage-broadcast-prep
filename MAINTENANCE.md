@@ -8,7 +8,7 @@ It's **one file** (`index.html`) hosted on **GitHub Pages** under your `AwsomT` 
 To ship ANY change: **edit → commit → push.** Pages redeploys in ~1 minute. That's the whole
 deploy process.
 
-- Project folder: `~/Guittap Synapse X/King's Anchorage/church-yt-dock/`
+- Project folder: `~/Guittap Synapse X/07 King's Anchorage/church-yt-dock/`
 - Live site: https://awsomt.github.io/kings-anchorage-broadcast-prep/
 - Repo: `github.com/AwsomT/kings-anchorage-broadcast-prep`
 
@@ -22,7 +22,7 @@ one is exactly what you'd hope:
 1. Drop the new image into `thumbnails/` using the **same filename** (e.g. overwrite `sunday.jpg`).
 2. Commit and push:
    ```bash
-   cd ~/"Guittap Synapse X/King's Anchorage/church-yt-dock"
+   cd ~/"Guittap Synapse X/07 King's Anchorage/church-yt-dock"
    git add thumbnails/ && git commit -m "Update sunday thumbnail" && git push
    ```
 3. Done. The next **Set up this week** uses the new image.
@@ -86,7 +86,7 @@ In `index.html`, change `const PRIVACY = "private";` to `"public";`. Commit + pu
 - **Delete test / junk broadcasts:** in the dock, click **Find & delete ALL test broadcasts.**
 - **Test locally before pushing:**
   ```bash
-  cd ~/"Guittap Synapse X/King's Anchorage/church-yt-dock" && python3 -m http.server 8000
+  cd ~/"Guittap Synapse X/07 King's Anchorage/church-yt-dock" && python3 -m http.server 8000
   # open http://localhost:8000/
   # (the test OAuth client needs http://localhost:8000 as an origin + http://localhost:8000/ as a redirect URI)
   ```
