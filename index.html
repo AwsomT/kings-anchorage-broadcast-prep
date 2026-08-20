@@ -38,19 +38,33 @@
   .pill { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); }
   code { background: var(--panel2); padding: 1px 4px; border-radius: 4px; font-size: 11px; }
   .warnbox { background: #3a2f1a; border: 1px solid var(--warn); color: #f0d78c; border-radius: 6px; padding: 8px; font-size: 11px; margin-bottom: 10px; }
+  details.help { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; margin-top: 10px; }
+  details.help summary { cursor: pointer; padding: 10px 12px; font-weight: 600; font-size: 12px; list-style: none; }
+  details.help summary::-webkit-details-marker { display: none; }
+  details.help summary::before { content: "▸ "; color: var(--muted); }
+  details.help[open] summary::before { content: "▾ "; }
+  details.help .helpbody { padding: 0 12px 10px; font-size: 12px; color: var(--muted); }
+  details.help .helpbody p { margin: 9px 0; }
+  details.help .helpbody strong { color: var(--text); }
+  details.help .helpfoot { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 10px; }
 </style>
 </head>
 <body>
-  <h1>⚓ King's Anchorage <span class="pill" id="mode">TEST</span></h1>
+  <h1>⚓ King's Anchorage <span class="pill" id="mode">LIVE</span></h1>
   <div class="sub">Broadcast Prep — creates the week's YouTube services, named + thumbnailed.</div>
 
   <div class="warnbox" id="cfgwarn" style="display:none">
     ⚠️ CLIENT_ID not set. Edit <code>index.html</code> and paste your OAuth Client ID.
   </div>
 
+  <div class="warnbox" id="resignwarn" style="display:none">
+    ⚠️ Sign-in expired. Click <strong>Sign in with Google</strong> again to keep auto-publish working.
+  </div>
+
   <div class="card">
     <button id="signin">Sign in with Google</button>
     <div class="status" id="authstatus">Not signed in.</div>
+    <div class="status" id="autostatus"></div>
   </div>
 
   <div class="card">
@@ -58,11 +72,22 @@
     <div id="svclist"></div>
   </div>
 
-  <button id="create" disabled>Set up this week (PRIVATE test)</button>
+  <button id="create" disabled>Set up this week (private)</button>
   <div class="row" style="margin-top:8px">
-    <button class="secondary" id="cleanup" disabled>Find & delete ALL test broadcasts</button>
+    <button class="secondary" id="cleanup" disabled>Find & delete this week's broadcasts</button>
   </div>
   <div class="status" id="log"></div>
+
+  <details class="help">
+    <summary>Help &amp; troubleshooting</summary>
+    <div class="helpbody">
+      <p><strong>Yellow "Sign in again" banner showing?</strong><br>Click <em>Sign in with Google</em> at the top. That's the whole fix.</p>
+      <p><strong>A service didn't go public?</strong><br>Check the top says <em>Signed in ✓</em> and <em>Auto-publish ON</em>. You can also set any stream to Public by hand in YouTube Studio.</p>
+      <p><strong>Page won't load, or "server IP address not found"?</strong><br>That's the internet, not this tool. Check the Wi-Fi, then refresh (Ctrl/Cmd + R).</p>
+      <p><strong>"Google hasn't verified this app" screen?</strong><br>This is our own church app — it's safe. Click <em>Advanced → Go to King's Anchorage</em>.</p>
+      <p class="helpfoot">Still stuck, or the dock won't work at all? See the printed <strong>Booth Guide</strong> at the booth for the manual fallback and who to call.</p>
+    </div>
+  </details>
 
 <script>
 /* ============================================================
@@ -75,17 +100,53 @@ const REDIRECT_URI = window.location.origin + window.location.pathname;
 
 // dayOfWeek: 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
 const SERVICES = [
-  { key: "s9",  label: "9AM Sunday Service",        day: 0, hour: 9,  min: 0, thumb: "sunday.jpg" },
-  { key: "s11", label: "11AM Sunday Service",       day: 0, hour: 11, min: 0, thumb: "sunday.jpg" },
-  { key: "s18", label: "6PM Sunday Service",        day: 0, hour: 18, min: 0, thumb: "evening.jpg" },
-  { key: "mid", label: "Midweek Service",           day: 3, hour: 19, min: 0, thumb: "midweek.jpg" },
-  { key: "tt",  label: "Transformation Thursday",   day: 4, hour: 19, min: 0, thumb: "transformation-thursday.jpg" },
+  { key: "s9",  label: "9AM Sunday Worship Experience",   day: 0, hour: 9,  min: 0, thumb: "sunday.jpg" },
+  { key: "s11", label: "11AM Sunday Worship Experience",  day: 0, hour: 11, min: 0, thumb: "sunday.jpg" },
+  { key: "s18", label: "6PM Sunday Worship Experience",   day: 0, hour: 18, min: 0, thumb: "evening.jpg" },
+  { key: "mid", label: "Midweek Worship Experience",      day: 3, hour: 19, min: 0, thumb: "midweek.jpg" },
+  { key: "tt",  label: "Transformation Thursday",         day: 4, hour: 19, min: 0, thumb: "transformation-thursday.jpg" },
 ];
 const THUMB_DIR = "thumbnails/";
 const DATE_STAMP = false; // set true to burn the date onto each thumbnail's corner
-const TITLE = (label, dateStr) => `${label} · ${dateStr}`;
-const PRIVACY = "private"; // test-safe: no subscriber notifications. Switch to "public" for real.
+const TITLE = (label, dateStr) => `King's Anchorage | ${label} · ${dateStr}`;
+const PRIVACY = "private"; // created private (no subscriber notifications); publish each service manually when it goes live. Set "public" to publish on creation.
+// Applied to every stream. Edit freely — this replaces the YouTube channel default.
+const DESCRIPTION = `Welcome to King's Anchorage — where we Experience Life with People, Power, and Purpose! 🙌
+
+Thanks for joining us online. Whether you're new here or part of the family, we're glad you're worshiping with us today.
+
+🕘 WORSHIP TIMES
+Sundays — 9AM, 11AM & 6PM
+Wednesday Midweek — 7PM
+Transformation Thursday — 7PM
+
+💛 GIVE
+Partner with what God is doing at King's Anchorage:
+https://pushpay.com/g/kceagleriver?src=fp
+
+🙏 NEXT STEPS
+Made a decision for Christ today? Tell us: https://kingsanchorage.com/decision-card/
+New here? Fill out our connect card: https://kingsanchorage.com/connect-card/
+Need prayer? We'd love to pray with you: https://kingsanchorage.com/prayer-request/
+
+🔗 CONNECT WITH US
+Website: https://kingsanchorage.com/
+Instagram: https://www.instagram.com/kingsanchorage
+Facebook: https://www.facebook.com/KcEagleRiver/
+YouTube: https://www.youtube.com/@kingsanchorage
+Subscribe and tap the 🔔 so you never miss a service.
+
+📍 VISIT US
+7801 E 32nd Ave, Anchorage, AK 99504
+
+#KingsAnchorage #ExperienceLife #Church #Livestream #Anchorage`;
 const SCOPES = "https://www.googleapis.com/auth/youtube.force-ssl";
+
+// --- Auto-publish: flip each service to public around its start time ---
+const AUTO_PUBLISH       = true;  // set false to disable and publish every service by hand
+const PUBLISH_BEFORE_MIN = 30;    // go public this many minutes BEFORE start
+const PUBLISH_AFTER_MIN  = 20;    // ...through this many minutes AFTER start
+const WATCH_INTERVAL_SEC = 60;    // how often the dock re-checks the schedule
 /* ============================================================ */
 
 let accessToken = null;
@@ -155,6 +216,22 @@ function restoreToken() {
     $("authstatus").style.color = "var(--ok)";
     $("create").disabled = false;
     $("cleanup").disabled = false;
+    needResign(false);
+    startAutoPublish();
+    confirmSignIn();
+  }
+}
+
+// Verify the sign-in actually works by fetching the channel, and greet the booth.
+async function confirmSignIn() {
+  try {
+    const r = await yt("channels?part=snippet&mine=true", { method: "GET" });
+    const name = r?.items?.[0]?.snippet?.title;
+    log(`✓ Signed in to Google${name ? ` as ${name}` : ""}.`, "ok");
+    needResign(false);
+  } catch (e) {
+    log(`⚠️ Sign-in didn't verify — please click "Sign in with Google" again.`, "err");
+    needResign(true);
   }
 }
 
@@ -172,7 +249,7 @@ async function yt(path, opts) {
 
 async function createBroadcast(title, startISO) {
   const body = {
-    snippet: { title, scheduledStartTime: startISO },
+    snippet: { title, description: DESCRIPTION, scheduledStartTime: startISO },
     status: { privacyStatus: PRIVACY, selfDeclaredMadeForKids: false },
     contentDetails: { enableAutoStart: false, enableAutoStop: false },
   };
@@ -220,6 +297,87 @@ async function setThumbnail(videoId, blob) {
   return res.json();
 }
 
+/* ---------- Auto-publish watcher ---------- */
+let watchTimer = null;
+
+// Flip a broadcast's privacy (private -> public at go-live time).
+async function setBroadcastPrivacy(id, privacy) {
+  return yt("liveBroadcasts?part=status", {
+    method: "PUT",
+    body: JSON.stringify({ id, status: { privacyStatus: privacy } }),
+  });
+}
+
+function needResign(show) { $("resignwarn").style.display = show ? "block" : "none"; }
+
+// Best-effort silent token renewal (no click) via a hidden iframe. Google may refuse to
+// renew this way (framing / cookie policy); if so we fall back to the re-sign banner.
+function silentRefresh() {
+  return new Promise((resolve) => {
+    const p = new URLSearchParams({
+      client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: "token",
+      scope: SCOPES, include_granted_scopes: "true", prompt: "none", state: "refresh",
+    });
+    const frame = document.createElement("iframe");
+    frame.style.display = "none";
+    let done = false;
+    const finish = (tok) => { if (done) return; done = true; frame.remove(); resolve(tok); };
+    frame.onload = () => {
+      try {
+        const hash = frame.contentWindow.location.hash; // readable only once back on our origin
+        const t = hash ? new URLSearchParams(hash.slice(1)).get("access_token") : null;
+        if (t) { accessToken = t; sessionStorage.setItem("yt_token", t); }
+        finish(t);
+      } catch (_) { finish(null); } // still on accounts.google.com = couldn't renew silently
+    };
+    frame.src = "https://accounts.google.com/o/oauth2/v2/auth?" + p;
+    document.body.appendChild(frame);
+    setTimeout(() => finish(null), 8000);
+  });
+}
+
+// One scan: publish any of our services whose start time is inside the publish window.
+async function autoPublishScan() {
+  if (!AUTO_PUBLISH || !accessToken) return;
+  const labels = SERVICES.map((s) => s.label);
+  const now = Date.now();
+  const beforeMs = PUBLISH_BEFORE_MIN * 60000, afterMs = PUBLISH_AFTER_MIN * 60000;
+  let items = [], pageToken = "";
+  try {
+    do {
+      const r = await yt("liveBroadcasts?part=snippet,status&broadcastStatus=upcoming&maxResults=50" + (pageToken ? "&pageToken=" + pageToken : ""), { method: "GET" });
+      items = items.concat(r.items || []);
+      pageToken = r.nextPageToken || "";
+    } while (pageToken);
+    needResign(false); // a successful call means the sign-in is still good
+  } catch (e) {
+    // Token likely expired — try a silent renew, else ask for one re-sign click.
+    const t = await silentRefresh();
+    if (!t) needResign(true);
+    return;
+  }
+  for (const it of items) {
+    if (it.status?.privacyStatus !== "private") continue;
+    if (!labels.some((l) => it.snippet.title.includes(l))) continue;
+    if (!it.snippet.scheduledStartTime) continue;
+    const start = new Date(it.snippet.scheduledStartTime).getTime();
+    if (now >= start - beforeMs && now <= start + afterMs) {
+      try {
+        await setBroadcastPrivacy(it.id, "public");
+        log(`▶ "${it.snippet.title}" is now PUBLIC (auto)`, "ok");
+      } catch (e) { log(`auto-publish failed for "${it.snippet.title}": ${e.message}`, "err"); }
+    }
+  }
+}
+
+function startAutoPublish() {
+  if (!AUTO_PUBLISH || watchTimer) return;
+  $("autostatus").textContent = `Auto-publish ON — services go public ${PUBLISH_BEFORE_MIN} min before start.`;
+  $("autostatus").style.color = "var(--ok)";
+  autoPublishScan();
+  watchTimer = setInterval(autoPublishScan, WATCH_INTERVAL_SEC * 1000);
+}
+
 async function run() {
   $("create").disabled = true; $("log").innerHTML = ""; madeIds.length = 0;
   resetDots();
@@ -243,7 +401,7 @@ async function run() {
       setDot(s.key, "err");
     }
   }
-  log(`\nDone. Open OBS → Manage Broadcast to see them.`);
+  log(`\nDone. Open OBS → Manage Broadcast to see them.\n\n🙏 Have a blessed week!`, "ok");
   $("create").disabled = false;
   $("cleanup").disabled = madeIds.length === 0;
 }
@@ -259,7 +417,7 @@ async function cleanup() {
     do {
       const r = await yt("liveBroadcasts?part=snippet&broadcastStatus=all&maxResults=50" + (pageToken ? "&pageToken=" + pageToken : ""), { method: "GET" });
       (r.items || []).forEach((it) => {
-        if (labels.some((l) => it.snippet.title.startsWith(l))) found.push(it);
+        if (labels.some((l) => it.snippet.title.includes(l))) found.push(it);
       });
       pageToken = r.nextPageToken || "";
     } while (pageToken);
