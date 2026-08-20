@@ -74,7 +74,7 @@
 
   <button id="create" disabled>Set up this week (private)</button>
   <div class="row" style="margin-top:8px">
-    <button class="secondary" id="cleanup" disabled>Find & delete this week's broadcasts</button>
+    <button class="secondary" id="cleanup" disabled>Delete unused (private) streams — never touches live</button>
   </div>
   <div class="status" id="log"></div>
 
@@ -381,12 +381,38 @@ function startAutoPublish() {
 async function run() {
   $("create").disabled = true; $("log").innerHTML = ""; madeIds.length = 0;
   resetDots();
+
+  // Fetch existing upcoming broadcasts first, so pressing this twice never makes duplicates.
+  const existingTitles = new Set();
+  try {
+    let pageToken = "";
+    do {
+      const r = await yt("liveBroadcasts?part=snippet&broadcastStatus=upcoming&maxResults=50" + (pageToken ? "&pageToken=" + pageToken : ""), { method: "GET" });
+      (r.items || []).forEach((it) => existingTitles.add(it.snippet.title));
+      pageToken = r.nextPageToken || "";
+    } while (pageToken);
+  } catch (e) {
+    log(`Couldn't check existing broadcasts: ${e.message}`, "err");
+    log(`Stopped to avoid duplicates. Click "Sign in with Google" again, then retry.`, "err");
+    $("create").disabled = false;
+    return;
+  }
+
+  let created = 0, skipped = 0;
   for (const s of SERVICES) {
     setDot(s.key, "run");
     const dateStr = fmtDate(s._date);
+    const title = TITLE(s.label, dateStr);
+    if (existingTitles.has(title)) {                 // already made for this date — don't duplicate
+      log(`• ${s.label} already exists — skipped`, "warn");
+      setDot(s.key, "ok");
+      skipped++;
+      continue;
+    }
     try {
-      const b = await createBroadcast(TITLE(s.label, dateStr), s._date.toISOString());
+      const b = await createBroadcast(title, s._date.toISOString());
       madeIds.push(b.id);
+      created++;
       log(`✓ ${s.label} created (id ${b.id})`, "ok");
       try {
         const thumb = await makeThumbnail(s, dateStr);
@@ -401,12 +427,13 @@ async function run() {
       setDot(s.key, "err");
     }
   }
-  log(`\nDone. Open OBS → Manage Broadcast to see them.\n\n🙏 Have a blessed week!`, "ok");
+  log(`\nDone — ${created} created, ${skipped} already existed. Open OBS → Manage Broadcast to see them.\n\n🙏 Have a blessed week!`, "ok");
   $("create").disabled = false;
-  $("cleanup").disabled = madeIds.length === 0;
+  $("cleanup").disabled = false;
 }
 
-// Scan the channel for any broadcast whose title matches our services, and delete them.
+// Delete ONLY private, upcoming broadcasts that match our service names.
+// Never touches anything live, public, or already finished. Asks before deleting.
 async function cleanup() {
   $("cleanup").disabled = true;
   $("log").innerHTML = "";
@@ -415,21 +442,33 @@ async function cleanup() {
   let found = [], pageToken = "";
   try {
     do {
-      const r = await yt("liveBroadcasts?part=snippet&broadcastStatus=all&maxResults=50" + (pageToken ? "&pageToken=" + pageToken : ""), { method: "GET" });
+      const r = await yt("liveBroadcasts?part=snippet,status&broadcastStatus=upcoming&maxResults=50" + (pageToken ? "&pageToken=" + pageToken : ""), { method: "GET" });
       (r.items || []).forEach((it) => {
-        if (labels.some((l) => it.snippet.title.includes(l))) found.push(it);
+        const isPrivate = it.status?.privacyStatus === "private";   // never delete public/live
+        const matches = labels.some((l) => it.snippet.title.includes(l));
+        if (isPrivate && matches) found.push(it);
       });
       pageToken = r.nextPageToken || "";
     } while (pageToken);
   } catch (e) { log("scan failed: " + e.message, "err"); $("cleanup").disabled = false; return; }
 
-  if (!found.length) { log("No test broadcasts found — channel is clean. ✓", "ok"); $("cleanup").disabled = false; return; }
-  log(`Found ${found.length} test broadcast(s). Deleting…`);
+  if (!found.length) {
+    log("Nothing to remove — no PRIVATE upcoming streams match. ✓", "ok");
+    log("(Live and public streams are never touched by this button.)");
+    $("cleanup").disabled = false;
+    return;
+  }
+
+  const list = found.map((it) => "• " + it.snippet.title).join("\n");
+  const ok = confirm(`Delete these ${found.length} PRIVATE upcoming stream(s)?\n\n${list}\n\nLive and public streams are NOT affected.`);
+  if (!ok) { log("Cancelled — nothing deleted.", "warn"); $("cleanup").disabled = false; return; }
+
+  log(`Deleting ${found.length} private upcoming stream(s)…`);
   for (const it of found) {
     try { await yt("liveBroadcasts?id=" + it.id, { method: "DELETE" }); log(`🗑 deleted "${it.snippet.title}"`, "warn"); }
     catch (e) { log(`could not delete ${it.id}: ${e.message}`, "err"); }
   }
-  log("\nCleanup complete.", "ok");
+  log("\nCleanup complete. Live/public streams were left untouched.", "ok");
   madeIds.length = 0;
   $("cleanup").disabled = false;
 }
